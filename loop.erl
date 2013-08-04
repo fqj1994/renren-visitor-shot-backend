@@ -29,7 +29,7 @@ user_keeper(Token, Uid, Target, LastVal, _LastSleepTime) ->
         end,
         {NewSleepTime, NewVisitorCount}
     catch
-        _E -> {30, LastVal}
+        error:_ -> {30, LastVal}
     end,
     receive
         stop ->

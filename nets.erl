@@ -27,7 +27,7 @@ accept_worker(Socket) ->
                         gen_tcp:send(Socket, <<0:1/big-unsigned-integer-unit:8, 0:12/big-unsigned-integer-unit:8>>)
                 end
             catch
-                _E -> gen_tcp:send(Socket, <<0:1/big-unsigned-integer-unit:8, 0:12/big-unsigned-integer-unit:8>>)
+                error:_ -> gen_tcp:send(Socket, <<0:1/big-unsigned-integer-unit:8, 0:12/big-unsigned-integer-unit:8>>)
             end;
         _ ->
             ok
