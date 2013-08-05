@@ -11,7 +11,13 @@ accept_worker(Socket) ->
             {ok, <<TARGET:4/big-unsigned-integer-unit:8>>} = gen_tcp:recv(Socket, 4),
             UID = binary_to_list(UIDB),
             TOKEN = binary_to_list(TOKENB),
-            spawn(fun() -> register(list_to_atom("m" ++ UID), self()), loop:user_keeper_mon(TOKEN, UID, TARGET, 0, 30) end);
+            try
+                list_to_atom("m" ++ UID) ! {check, self()},
+                gen_tcp:send(Socket, "e")
+            catch error:badarg ->
+                spawn(fun() -> register(list_to_atom("m" ++ UID), self()), loop:user_keeper_mon(TOKEN, UID, TARGET, 0, 30) end),
+                gen_tcp:send(Socket, "o")
+            end;
         {ok, <<2:1/big-unsigned-integer-unit:8, LENID:1/big-unsigned-integer-unit:8, _>>} ->
             {ok, UIDB} = gen_tcp:recv(Socket, LENID),
             UID = binary_to_list(UIDB),
@@ -28,6 +34,16 @@ accept_worker(Socket) ->
                 end
             catch
                 error:_ -> gen_tcp:send(Socket, <<0:1/big-unsigned-integer-unit:8, 0:12/big-unsigned-integer-unit:8>>)
+            end;
+        {ok, <<4:1/big-unsigned-integer-unit:8, LENID:1/big-unsigned-integer-unit:8, _>>} ->
+            {ok, UIDB} = gen_tcp:recv(Socket, LENID),
+            UID = binary_to_list(UIDB),
+            {ok, <<TARGET:4/big-unsigned-integer-unit:8>>} = gen_tcp:recv(Socket, 4),
+            try
+                list_to_atom("p" ++ UID) ! {updatetarget, TARGET},
+                gen_tcp:send(Socket, "o")
+            catch
+                error:_ -> gen_tcp:send(Socket, "e")
             end;
         _ ->
             ok

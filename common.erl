@@ -79,7 +79,7 @@ run(Cmd, Timeout) ->
 loop(Port, Data, Timeout) ->
     receive
         {Port, {data, NewData}} -> loop(Port, Data++NewData, Timeout);
-        {Port, {exit_status, 0}} -> Data;
+        {Port, {exit_status, 0}} -> ok;
         {Port, {exit_status, _}} -> error
     after Timeout ->
             error
