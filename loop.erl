@@ -1,6 +1,29 @@
 -module(loop).
 -export([user_keeper/5, user_keeper_mon/5, user_keeper_mon_core/6, user_keeper_global_mon/0, user_keeper_global_mon_core/1]).
 
+process_message(Token, Uid, Target, VisitorCount, EndTime) ->
+        {P, Q, R} = receive
+            {updatetarget, NewTarget} ->
+                list_to_atom("m" ++ Uid) ! {updateinfo, VisitorCount, NewTarget},
+                {ok, Token, NewTarget};
+            stop ->
+                {stop, Token, Target};
+            _ ->
+                {ok, Token, Target}
+        after 0 ->
+                {null, Token, Target}
+        end,
+        {MillionSec, Sec, _} = erlang:now(),
+        Time = MillionSec * 1000000 + Sec,
+        if
+            P =:= stop -> {P, Q, R};
+            P =:= ok -> process_message(Q, Uid, R, VisitorCount, EndTime);
+            EndTime >= Time ->
+                timer:sleep(1000),
+                process_message(Q, Uid, R, VisitorCount, EndTime);
+            true -> {P, Q, R}
+        end.
+
 
 user_keeper(Token, Uid, Target, LastVal, _LastSleepTime) ->
     inets:start(httpc, [{profile, list_to_atom(Uid)}]),
@@ -31,18 +54,14 @@ user_keeper(Token, Uid, Target, LastVal, _LastSleepTime) ->
     catch
         error:_ -> {30, LastVal}
     end,
-    NewTarget = receive
-        {updatetarget, GetNewTarget} ->
-            GetNewTarget
-    after 1 ->
-            Target
-    end,
-    receive
-        stop ->
-            inets:stop(httpc, list_to_atom(Uid)),
-            ok
-    after SleepTime * 1000 ->
-            loop:user_keeper(Token, Uid, NewTarget, VisitorCount, SleepTime)
+    {MillionSec, Sec, _} = erlang:now(),
+    Time = MillionSec * 1000000 + Sec,
+    {Sign, NewToken, NewTarget} = process_message(Token, Uid, Target, VisitorCount, Time + SleepTime),
+    if
+        Sign =:= stop  ->
+            inets:stop(httpc, list_to_atom(Uid));
+        true ->
+            loop:user_keeper(NewToken, Uid, NewTarget, VisitorCount, SleepTime)
     end.
 
 
@@ -56,6 +75,9 @@ user_keeper_mon_core(A, B, C, D, E, {Value, Time}) ->
         {check, From} ->
             From ! {Value, Time},
             loop:user_keeper_mon_core(A, B, C, D, E, {Value, Time});
+        {updateinfo, NewValue, NewTarget} ->
+            global_mon ! {set, B, NewTarget, NewValue, Time},
+            loop:user_keeper_mon_core(A, B, NewTarget, D, E, {NewValue, Time});
         {update, NewValue, NewTarget} ->
             {NewTimeMega, NewTimeSec, _} = erlang:now(),
             NewTime = NewTimeMega * 1000000 + NewTimeSec,
