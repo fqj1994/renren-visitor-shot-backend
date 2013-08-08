@@ -16,30 +16,47 @@ users = [i.split(' ') for i in info[3:]]
 while users[-1] == ['']:
     users = users[:-1]
 avatars = []
+res = requests.post('https://api.renren.com/restserver.do',
+                    data={
+                        'method': 'users.getInfo',
+                        'v': '1.0',
+                        'access_token': urllib.unquote_plus(token),
+                        'format': 'json',
+                        'uids': ','.join(map(lambda t: t[0], users)),
+                        'fields': 'uid,name,mainurl'
+                    }
+                    ).json()
+for i in users:
+    for j in res:
+        if i[0] == j['uid']:
+            i[2] = j['mainurl']
 for i in users:
     timg = Image.open(StringIO(requests.get(i[2]).content))
-    avatars.append(timg.resize((30, 30)))
+    avatars.append(timg.resize((60, 60), Image.ANTIALIAS))
 
-img = Image.new('RGB', (250, 80))
-for x in xrange(250):
-    for y in xrange(80):
+img = Image.new('RGB', (500, 160))
+for x in xrange(500):
+    for y in xrange(160):
         img.putpixel((x, y), (255, 255, 255))
 
 j = 0
 for i in avatars:
     if j == 7:
         break
-    for x in xrange(30):
-        for y in xrange(30):
+    for x in xrange(60):
+        for y in xrange(60):
             v = i.getpixel((x, y))
-            img.putpixel((5 + 35 * j + x, y + 40), v)
+            img.putpixel((10 + 70 * j + x, y + 80), v)
     j += 1
 
-font = ImageFont.truetype("wqy-microhei.ttc", 12)
-fonthei = ImageFont.truetype("wqy-zenhei.ttc", 12)
+font = ImageFont.truetype("wqy-microhei.ttc", 24)
 draw = ImageDraw.Draw(img)
-draw.text((5, 13), unicode("最近来访 ", 'UTF-8'), (0, 0, 0), font=fonthei)
-draw.text((58, 14), unicode(target, 'UTF-8'), (0, 0, 0), font=font)
+draw.text((116, 28), unicode(target, 'UTF-8'), (0, 0, 0), font=font)
+zuijinlaifang = Image.open(open('word-zuijinlaifang.png'))
+width, height = zuijinlaifang.size
+for i in range(5, 5 + width):
+    for j in range(27, 27 + height):
+        img.putpixel((i, j), zuijinlaifang.getpixel((i - 5, j - 27)))
 
 img.save(uid + ".png")
 
@@ -53,12 +70,24 @@ try:
                     'v': '1.0',
                     'access_token': urllib.unquote_plus(token),
                     'format': 'json',
-                    'uid': uid
+                    'uid': uid,
+                    'count': '1000'
                 }
                 ).json()
     for i in albs:
         if i['name'] == u"来访截图":
             aid = i['aid']
+    if not aid:
+        albs = requests.post('https://api.renren.com/restserver.do',
+                data={
+                    'method': 'photos.createAlbum',
+                    'v': '1.0',
+                    'access_token': urllib.unquote_plus(token),
+                    'format': 'json',
+                    'name': u'来访截图'
+                }
+                ).json()
+        aid = albs['aid']
 except:
     pass
 
@@ -80,20 +109,20 @@ pic = requests.post("https://api.renren.com/restserver.do", data=data,
 
 j = 0
 for user in users[0:7]:
-    print requests.post("https://api.renren.com/restserver.do", data={
+    requests.post("https://api.renren.com/restserver.do", data={
         "v": "1.0",
         "access_token": urllib.unquote_plus(token),
         "format": 'json',
         'method': 'photos.tag',
         'photo_id': pic['pid'],
         'owner_id': uid,
-        'photo_width': 250,
-        'photo_height': 80,
-        'frame_width': 30,
-        'frame_height': 30,
+        'photo_width': 500,
+        'photo_height': 160,
+        'frame_width': 60,
+        'frame_height': 60,
         'tagged_user_id': user[0],
-        'top': '40',
-        'left': 5 + j * 35
+        'top': '80',
+        'left': 10 + j * 70
     }).json()
     j += 1
 

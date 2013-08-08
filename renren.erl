@@ -4,7 +4,7 @@
 renren_get_visitor_count(Token, Uid) ->
     case common:http_post(
             "https://api.renren.com/restserver.do",
-            lists:concat(["access_token=", Token, "&method=users.getProfileInfo&format=json&v=1.0&fields=visitors_count&uid=", Uid]),
+            lists:concat(["access_token=", common:urlencode_utf8(Token), "&method=users.getProfileInfo&format=json&v=1.0&fields=visitors_count&uid=", Uid]),
             list_to_atom(Uid)
         ) of
         {ok, {_, _, Body}} -> 
@@ -18,7 +18,7 @@ renren_get_latest_visitor(Token, Uid) ->
 renren_get_latest_visitor(Token, Uid, Count) ->
     case common:http_post(
             "https://api.renren.com/restserver.do",
-            lists:concat(["access_token=", Token, "&method=users.getVisitors&format=json&v=1.0&count=", integer_to_list(Count)]),
+            lists:concat(["access_token=", common:urlencode_utf8(Token), "&method=users.getVisitors&format=json&v=1.0&count=", integer_to_list(Count)]),
             list_to_atom(Uid)
         ) of
         {ok, {_, _, Body}} ->
