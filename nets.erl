@@ -4,25 +4,27 @@
     ]).
 
 accept_worker(Socket) ->
-    case gen_tcp:recv(Socket, 3) of
-        {ok, <<1:1/big-unsigned-integer-unit:8,LENID:1/big-unsigned-integer-unit:8, LENTOKEN:1/big-unsigned-integer-unit:8>>} ->
+    case gen_tcp:recv(Socket, 4) of
+        {ok, <<1:1/big-unsigned-integer-unit:8,LENID:1/big-unsigned-integer-unit:8, LENTOKEN:1/big-unsigned-integer-unit:8, LENREFRESH:1/big-unsigned-integer-unit:8>>} ->
             {ok, UIDB} = gen_tcp:recv(Socket, LENID),
             {ok, TOKENB} = gen_tcp:recv(Socket, LENTOKEN),
+            {ok, REFRESHB} = gen_tcp:recv(Socket, LENREFRESH),
             {ok, <<TARGET:4/big-unsigned-integer-unit:8>>} = gen_tcp:recv(Socket, 4),
             UID = binary_to_list(UIDB),
             TOKEN = binary_to_list(TOKENB),
+            Refresh = binary_to_list(REFRESHB),
             try
                 list_to_atom("m" ++ UID) ! {check, self()},
                 gen_tcp:send(Socket, "e")
             catch error:badarg ->
-                spawn(fun() -> register(list_to_atom("m" ++ UID), self()), loop:user_keeper_mon(TOKEN, UID, TARGET, 0, 30) end),
+                spawn(fun() -> register(list_to_atom("m" ++ UID), self()), loop:user_keeper_mon(TOKEN, UID, TARGET, 0, Refresh, 30) end),
                 gen_tcp:send(Socket, "o")
             end;
-        {ok, <<2:1/big-unsigned-integer-unit:8, LENID:1/big-unsigned-integer-unit:8, _>>} ->
+        {ok, <<2:1/big-unsigned-integer-unit:8, LENID:1/big-unsigned-integer-unit:8, _:2/big-unsigned-integer-unit:8>>} ->
             {ok, UIDB} = gen_tcp:recv(Socket, LENID),
             UID = binary_to_list(UIDB),
             list_to_atom("p" ++ UID) ! stop;
-        {ok, <<3:1/big-unsigned-integer-unit:8, LENID:1/big-unsigned-integer-unit:8, _>>} ->
+        {ok, <<3:1/big-unsigned-integer-unit:8, LENID:1/big-unsigned-integer-unit:8, _:2/big-unsigned-integer-unit:8>>} ->
             {ok, UIDB} = gen_tcp:recv(Socket, LENID),
             UID = binary_to_list(UIDB),
             try
@@ -35,7 +37,7 @@ accept_worker(Socket) ->
             catch
                 error:_ -> gen_tcp:send(Socket, <<0:1/big-unsigned-integer-unit:8, 0:12/big-unsigned-integer-unit:8>>)
             end;
-        {ok, <<4:1/big-unsigned-integer-unit:8, LENID:1/big-unsigned-integer-unit:8, _>>} ->
+        {ok, <<4:1/big-unsigned-integer-unit:8, LENID:1/big-unsigned-integer-unit:8, _:2/big-unsigned-integer-unit:8>>} ->
             {ok, UIDB} = gen_tcp:recv(Socket, LENID),
             UID = binary_to_list(UIDB),
             {ok, <<TARGET:4/big-unsigned-integer-unit:8>>} = gen_tcp:recv(Socket, 4),

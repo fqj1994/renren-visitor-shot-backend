@@ -34,7 +34,7 @@ draw_graph_and_publish(Token, Uid, Target, VisitorList) ->
     end.
 
 
-publish_status_not_captured(Token, Uid, Target) ->
+publish_status_not_captured(_Token, _Uid, _Target) ->
     %PREFIX = "%E5%8F%88%E6%B2%A1%E6%88%AA%E5%88%B0%E7%AC%AC",
     %SUFFIX = "%E4%B8%AA%E6%9D%A5%E8%AE%BF%E3%80%82%28yl%29",
     %case http_post(

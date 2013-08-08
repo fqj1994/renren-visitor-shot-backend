@@ -15,8 +15,8 @@ process_and_output_users_list([]) ->
     ok;
 process_and_output_users_list([Head | Tail]) ->
     case Head of
-        {Uid, Target, Current, Time} ->
-            io:format("|~s\t|~p\t|~p\t\t|~p\t|\n", [Uid, Target, Current, Time]);
+        {Uid, Target, Current, Time, Access, Refresh} ->
+            io:format("|~s\t|~p\t|~p\t\t|~p\t|~p|~p|\n", [Uid, Target, Current, Time, Access, Refresh]);
         {Uid} ->
             io:format("|~s\t|\n", [Uid])
     end,

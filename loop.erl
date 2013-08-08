@@ -1,34 +1,37 @@
 -module(loop).
--export([user_keeper/5, user_keeper_mon/5, user_keeper_mon_core/6, user_keeper_global_mon/0, user_keeper_global_mon_core/1]).
+-export([user_keeper/6, user_keeper_mon/6, user_keeper_mon_core/7, user_keeper_global_mon/0, user_keeper_global_mon_core/1]).
 
-process_message(Token, Uid, Target, VisitorCount, EndTime) ->
-        {P, Q, R} = receive
+process_message(Token, Uid, Target, VisitorCount, RefreshToken, EndTime) ->
+        {P, Q, R, S} = receive
             {updatetarget, NewTarget} ->
                 list_to_atom("m" ++ Uid) ! {updateinfo, VisitorCount, NewTarget},
-                {ok, Token, NewTarget};
+                {ok, Token, NewTarget, RefreshToken};
+            {updatetoken, NewRefreshToken, NewAccessToken} ->
+                list_to_atom("m" ++ Uid) ! {updatetoken, NewAccessToken, NewRefreshToken},
+                {ok, NewAccessToken, Target, NewRefreshToken};
             stop ->
-                {stop, Token, Target};
+                {stop, Token, Target, RefreshToken};
             _ ->
-                {ok, Token, Target}
+                {ok, Token, Target, RefreshToken}
         after 0 ->
-                {null, Token, Target}
+                {null, Token, Target, RefreshToken}
         end,
         {MillionSec, Sec, _} = erlang:now(),
         Time = MillionSec * 1000000 + Sec,
         if
-            P =:= stop -> {P, Q, R};
-            P =:= ok -> process_message(Q, Uid, R, VisitorCount, EndTime);
+            P =:= stop -> {P, Q, R, S};
+            P =:= ok -> process_message(Q, Uid, R, VisitorCount, S, EndTime);
             EndTime >= Time ->
                 timer:sleep(1000),
-                process_message(Q, Uid, R, VisitorCount, EndTime);
-            true -> {P, Q, R}
+                process_message(Q, Uid, R, VisitorCount, S, EndTime);
+            true -> {P, Q, R, S}
         end.
 
 
-user_keeper(Token, Uid, Target, LastVal, _LastSleepTime) ->
+user_keeper(Token, Uid, Target, LastVal, RefreshToken, _LastSleepTime) ->
     inets:start(httpc, [{profile, list_to_atom(Uid)}]),
     {SleepTime, VisitorCount} = try
-        NewVisitorCount = renren:renren_get_visitor_count(Token, Uid),
+        {ok, NewVisitorCount} = renren:renren_get_visitor_count(Token, Uid),
         list_to_atom("m" ++ Uid) ! {update, NewVisitorCount, Target},
         NewSleepTime = case NewVisitorCount of
             LastVal ->
@@ -38,7 +41,7 @@ user_keeper(Token, Uid, Target, LastVal, _LastSleepTime) ->
         end,
         if
             NewVisitorCount >= Target ->
-                List = renren:renren_get_latest_visitor(Token, Uid, 7 + NewVisitorCount - Target),
+                {ok, List} = renren:renren_get_latest_visitor(Token, Uid, 7 + NewVisitorCount - Target),
                 if 
                     length(List) >= 7 + NewVisitorCount - Target ->
                         VisitorList = common:skip_first_serveral(List, length(List) - 7),
@@ -56,43 +59,50 @@ user_keeper(Token, Uid, Target, LastVal, _LastSleepTime) ->
     end,
     {MillionSec, Sec, _} = erlang:now(),
     Time = MillionSec * 1000000 + Sec,
-    {Sign, NewToken, NewTarget} = process_message(Token, Uid, Target, VisitorCount, Time + SleepTime),
+    {Sign, NewToken, NewTarget, NewRefreshToken} = process_message(Token, Uid, Target, VisitorCount, RefreshToken, Time + SleepTime),
     if
         Sign =:= stop  ->
             inets:stop(httpc, list_to_atom(Uid));
         true ->
-            loop:user_keeper(NewToken, Uid, NewTarget, VisitorCount, SleepTime)
+            loop:user_keeper(NewToken, Uid, NewTarget, VisitorCount, NewRefreshToken, SleepTime)
     end.
 
 
-user_keeper_mon_core(A, B, C, D, E, {Value, Time}) ->
+user_keeper_mon_core(A, B, C, D, E, F, {Value, Time}) ->
     receive
         {'EXIT', _Pid, normal} ->
             global_mon ! {del, B},
             ok;
         {'EXIT', _Pid, _} ->
-            loop:user_keeper_mon(A, B, C, D, E);
+            timer:sleep(30),
+            loop:user_keeper_mon(A, B, C, D, E, F);
         {check, From} ->
             From ! {Value, Time},
-            loop:user_keeper_mon_core(A, B, C, D, E, {Value, Time});
+            loop:user_keeper_mon_core(A, B, C, D, E, F, {Value, Time});
         {updateinfo, NewValue, NewTarget} ->
-            global_mon ! {set, B, NewTarget, NewValue, Time},
-            loop:user_keeper_mon_core(A, B, NewTarget, D, E, {NewValue, Time});
+            global_mon ! {set, B, NewTarget, NewValue, Time, A, E},
+            loop:user_keeper_mon_core(A, B, NewTarget, D, E, F, {NewValue, Time});
+        {updatetoken, NewAccessToken, NewRefreshToken} ->
+            global_mon ! {set, B, C, Value, Time, NewAccessToken, NewRefreshToken},
+            loop:user_keeper_mon_core(NewAccessToken, B, C, D, NewRefreshToken, F, {Value, Time});
+        {From, requestrefreshtoken} ->
+            From ! E,
+            loop:user_keeper_mon_core(A, B, C, D, E, F, {Value, Time});
         {update, NewValue, NewTarget} ->
             {NewTimeMega, NewTimeSec, _} = erlang:now(),
             NewTime = NewTimeMega * 1000000 + NewTimeSec,
-            global_mon ! {set, B, NewTarget, NewValue, NewTime},
-            loop:user_keeper_mon_core(A, B, NewTarget, D, E, {NewValue, NewTime})
+            global_mon ! {set, B, NewTarget, NewValue, NewTime, A, E},
+            loop:user_keeper_mon_core(A, B, NewTarget, D, E, F, {NewValue, NewTime})
     end.
 
-user_keeper_mon(A, B, C, D, E) ->
+user_keeper_mon(A, B, C, D, E, F) ->
     process_flag(trap_exit, true),
     spawn_link(fun() ->
         register(list_to_atom("p" ++ B), self()),
-        loop:user_keeper(A, B, C, D, E) end
+        loop:user_keeper(A, B, C, D, E, F) end
     ),
-    global_mon ! {add, B},
-    loop:user_keeper_mon_core(A, B, C, D, E, {0, 0}).
+    global_mon ! {set, B, C, 0, 0, A, E},
+    loop:user_keeper_mon_core(A, B, C, D, E, F, {0, 0}).
 
 
 user_keeper_global_mon_core(Tab) ->
@@ -100,8 +110,8 @@ user_keeper_global_mon_core(Tab) ->
         {add, UID} ->
             ets:insert(Tab, {UID}),
             loop:user_keeper_global_mon_core(Tab);
-        {set, UID, Target, Current, Time} ->
-            ets:insert(Tab, {UID, Target, Current, Time}),
+        {set, UID, Target, Current, Time, AccessToken, RefreshToken} ->
+            ets:insert(Tab, {UID, Target, Current, Time, AccessToken, RefreshToken}),
             loop:user_keeper_global_mon_core(Tab);
         {del, UID} ->
             ets:delete(Tab, UID),
