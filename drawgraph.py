@@ -20,7 +20,7 @@ res = requests.post('https://api.renren.com/restserver.do',
                     data={
                         'method': 'users.getInfo',
                         'v': '1.0',
-                        'access_token': urllib.unquote_plus(token),
+                        'access_token': token,
                         'format': 'json',
                         'uids': ','.join(map(lambda t: t[0], users)),
                         'fields': 'uid,name,mainurl'
@@ -68,7 +68,7 @@ try:
                 data={
                     'method': 'photos.getAlbums',
                     'v': '1.0',
-                    'access_token': urllib.unquote_plus(token),
+                    'access_token': token,
                     'format': 'json',
                     'uid': uid,
                     'count': '1000'
@@ -78,22 +78,23 @@ try:
         if i['name'] == u"来访截图":
             aid = i['aid']
     if not aid:
-        albs = requests.post('https://api.renren.com/restserver.do',
-                data={
-                    'method': 'photos.createAlbum',
-                    'v': '1.0',
-                    'access_token': urllib.unquote_plus(token),
-                    'format': 'json',
-                    'name': u'来访截图'
-                }
-                ).json()
-        aid = albs['aid']
+        for i in range(3):
+            albs = requests.post('https://api.renren.com/v2/album/put',
+                    data={
+                        'access_token': token,
+                        'name': u'来访截图'
+                    }
+                    ).json()
+            if u'response' in albs and u'id' in albs[u'response']:
+                aid = albs[u'response'][u'id']
+                if aid:
+                    break
 except:
     pass
 
 data = {
     "v": "1.0",
-    "access_token": urllib.unquote_plus(token),
+    "access_token": token,
     'format': 'json',
     'method': 'photos.upload',
     'caption': ''.join(["@" + urllib.unquote_plus(p[1]) + "(" + p[0] + ") " for p in users[0:7]]),
@@ -111,7 +112,7 @@ j = 0
 for user in users[0:7]:
     requests.post("https://api.renren.com/restserver.do", data={
         "v": "1.0",
-        "access_token": urllib.unquote_plus(token),
+        "access_token": token,
         "format": 'json',
         'method': 'photos.tag',
         'photo_id': pic['pid'],
